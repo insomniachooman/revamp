@@ -1,0 +1,20 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "resolveJsonModule": true,
+    "baseUrl": ".",
+    "paths": {
+      "@revamp/core-types": ["packages/core-types/src/index.ts"],
+      "@revamp/editor-engine": ["packages/editor-engine/src/index.ts"],
+      "@revamp/recording-engine": ["packages/recording-engine/src/index.ts"],
+      "@revamp/render-engine": ["packages/render-engine/src/index.ts"],
+      "@revamp/design-system": ["packages/design-system/src/index.ts"]
+    }
+  }
+}

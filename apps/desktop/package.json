@@ -1,0 +1,35 @@
+{
+  "name": "@revamp/desktop",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "main": "dist/main/index.cjs",
+  "scripts": {
+    "dev": "node ./scripts/run-electron-vite.mjs dev",
+    "build": "electron-vite build",
+    "preview": "node ./scripts/run-electron-vite.mjs preview",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "lint": "echo no-lint"
+  },
+  "dependencies": {
+    "@revamp/core-types": "workspace:*",
+    "@revamp/design-system": "workspace:*",
+    "@revamp/editor-engine": "workspace:*",
+    "@revamp/recording-engine": "workspace:*",
+    "@revamp/render-engine": "workspace:*",
+    "@tanstack/react-query": "^5.66.8",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0",
+    "react-router-dom": "^7.6.1",
+    "zustand": "^5.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.10",
+    "@types/react-dom": "^19.0.4",
+    "@vitejs/plugin-react": "^4.4.1",
+    "electron": "^34.0.0",
+    "electron-vite": "^3.1.0",
+    "typescript": "^5.8.2",
+    "vite": "^6.2.0"
+  }
+}

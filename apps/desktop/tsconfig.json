@@ -1,0 +1,8 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "jsx": "react-jsx",
+    "types": ["node", "vite/client", "electron", "react", "react-dom"]
+  },
+  "include": ["src/main", "src/preload", "src/renderer/src", "electron.vite.config.ts"]
+}
