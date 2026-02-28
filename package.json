@@ -4,7 +4,7 @@
   "version": "0.1.0",
   "packageManager": "pnpm@10.11.1",
   "scripts": {
-    "dev": "pnpm --filter @revamp/desktop dev",
+    "dev": "pnpm -r --filter @revamp/core-types --filter @revamp/design-system --filter @revamp/editor-engine --filter @revamp/recording-engine --filter @revamp/render-engine build && pnpm --filter @revamp/desktop dev",
     "build": "pnpm -r build",
     "lint": "pnpm -r lint",
     "typecheck": "pnpm -r typecheck"
