@@ -49,6 +49,10 @@ textarea {
   height: 100%;
 }
 
+.app-shell.app-shell-studio {
+  grid-template-columns: 84px 1fr;
+}
+
 .shell-sidebar {
   border-right: 1px solid rgba(131, 236, 255, 0.16);
   background: linear-gradient(180deg, rgba(14, 23, 33, 0.95), rgba(7, 11, 16, 0.85));
@@ -87,19 +91,35 @@ textarea {
   line-height: 1.35;
 }
 
+.brand-monogram {
+  display: none;
+}
+
 .side-nav {
   display: grid;
   gap: 8px;
 }
 
 .side-link {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   border-radius: 12px;
   padding: 10px 12px;
   color: var(--frost-300);
   text-decoration: none;
   border: 1px solid rgba(255, 255, 255, 0.05);
   background: rgba(255, 255, 255, 0.01);
+}
+
+.side-link-icon {
+  width: 18px;
+  height: 18px;
+  flex-shrink: 0;
+}
+
+.side-link-label {
+  white-space: nowrap;
 }
 
 .side-link.active {
@@ -127,6 +147,51 @@ textarea {
 
 .sidebar-meta strong {
   font-size: 13px;
+}
+
+.app-shell.app-shell-studio .shell-sidebar {
+  padding: 16px 10px;
+  gap: 16px;
+  align-items: center;
+}
+
+.app-shell.app-shell-studio .brand-stack {
+  justify-items: center;
+}
+
+.app-shell.app-shell-studio .brand-eyebrow,
+.app-shell.app-shell-studio .brand-title,
+.app-shell.app-shell-studio .brand-subtitle,
+.app-shell.app-shell-studio .sidebar-meta,
+.app-shell.app-shell-studio .side-link-label {
+  display: none;
+}
+
+.app-shell.app-shell-studio .brand-monogram {
+  display: inline-flex;
+  width: 44px;
+  height: 44px;
+  border-radius: 14px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(32, 215, 255, 0.42);
+  background: linear-gradient(160deg, rgba(32, 215, 255, 0.22), rgba(64, 255, 195, 0.08));
+  color: #f6fbff;
+  font-family: "Bebas Neue", "Impact", sans-serif;
+  font-size: 29px;
+  letter-spacing: 0.06em;
+}
+
+.app-shell.app-shell-studio .side-nav {
+  width: 100%;
+  justify-items: center;
+}
+
+.app-shell.app-shell-studio .side-link {
+  justify-content: center;
+  width: 48px;
+  min-height: 48px;
+  padding: 10px;
 }
 
 .shell-main {
@@ -576,9 +641,46 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  .app-shell.app-shell-studio {
+    grid-template-columns: 1fr;
+  }
+
   .shell-sidebar {
     border-right: none;
     border-bottom: 1px solid rgba(131, 236, 255, 0.16);
+  }
+
+  .app-shell.app-shell-studio .shell-sidebar {
+    align-items: stretch;
+    padding: 24px 20px;
+    gap: 22px;
+  }
+
+  .app-shell.app-shell-studio .brand-stack {
+    justify-items: start;
+  }
+
+  .app-shell.app-shell-studio .brand-eyebrow,
+  .app-shell.app-shell-studio .brand-title,
+  .app-shell.app-shell-studio .brand-subtitle,
+  .app-shell.app-shell-studio .sidebar-meta,
+  .app-shell.app-shell-studio .side-link-label {
+    display: initial;
+  }
+
+  .app-shell.app-shell-studio .brand-monogram {
+    display: none;
+  }
+
+  .app-shell.app-shell-studio .side-nav {
+    justify-items: stretch;
+  }
+
+  .app-shell.app-shell-studio .side-link {
+    justify-content: flex-start;
+    width: auto;
+    min-height: 0;
+    padding: 10px 12px;
   }
 
   .record-page-grid,

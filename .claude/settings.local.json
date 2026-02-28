@@ -1,0 +1,31 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npm run ai2files:dev:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(npx ts-node:*)",
+      "Bash(node:*)",
+      "Bash(npm run build:*)",
+      "Bash(npm run)",
+      "Bash(find:*)",
+      "Bash(npx jest:*)",
+      "Bash(rm:*)",
+      "Bash(npm run lint)",
+      "Bash(npm run package:*)",
+      "Bash(npm run start:app:*)",
+      "Bash(npm test:*)",
+      "Bash(ls:*)",
+      "Bash(npm run test:search-replace:*)",
+      "Bash(Remove-Item -Recurse -Force \"E:\\Personal Projects\\RepoCode\\src\\main\\search-replace\")",
+      "Bash(npm run typecheck:*)",
+      "Bash(findstr:*)",
+      "mcp__repocode__read_file",
+      "Bash(npm run build:main)"
+    ],
+    "deny": []
+  },
+  "disabledMcpjsonServers": [
+    "repocode"
+  ]
+}
