@@ -52,6 +52,45 @@ function createSpeedSegment(atMs: number): SpeedSegment {
   };
 }
 
+type SolidBackgroundSwatch = {
+  name: string;
+  value: string;
+};
+
+type GradientBackgroundSwatch = {
+  name: string;
+  from: string;
+  to: string;
+};
+
+const SOLID_BACKGROUND_SWATCHES: SolidBackgroundSwatch[] = [
+  { name: "Slate", value: "#111827" },
+  { name: "Deep Ocean", value: "#0b2545" },
+  { name: "Moss", value: "#1f3b2c" },
+  { name: "Ink", value: "#0f172a" },
+  { name: "Auburn", value: "#4a1f1f" },
+  { name: "Copper", value: "#6b3416" },
+  { name: "Graphite", value: "#1f2937" },
+  { name: "Teal Night", value: "#0f3d3e" },
+  { name: "Cobalt", value: "#172554" },
+  { name: "Charcoal", value: "#101214" }
+];
+
+const GRADIENT_BACKGROUND_SWATCHES: GradientBackgroundSwatch[] = [
+  { name: "Arctic", from: "#0f172a", to: "#0ea5e9" },
+  { name: "Copper Sky", from: "#431407", to: "#fb923c" },
+  { name: "Northern Pine", from: "#052e16", to: "#34d399" },
+  { name: "Dusk", from: "#1e293b", to: "#2563eb" },
+  { name: "Volcano", from: "#7f1d1d", to: "#f97316" },
+  { name: "Emerald Tide", from: "#0f766e", to: "#2dd4bf" },
+  { name: "Steel Blue", from: "#1f2937", to: "#38bdf8" },
+  { name: "Nightfall", from: "#020617", to: "#334155" }
+];
+
+function sameColor(left: string, right: string): boolean {
+  return left.trim().toLowerCase() === right.trim().toLowerCase();
+}
+
 function applyBackgroundStyle(settings: BackgroundSettings): React.CSSProperties {
   if (settings.type === "none") {
     return { background: "#101727" };
@@ -99,8 +138,12 @@ export function StudioPage() {
     text: ""
   });
   const [renderProgress, setRenderProgress] = useState(0);
+  const [previewAspectRatio, setPreviewAspectRatio] = useState("16 / 9");
+  const [previewFrameSize, setPreviewFrameSize] = useState({ width: 1920, height: 1080 });
+  const [isPreviewFullscreen, setIsPreviewFullscreen] = useState(false);
 
   const previewVideoRef = useRef<HTMLVideoElement | null>(null);
+  const previewWrapRef = useRef<HTMLDivElement | null>(null);
 
   const openProjectQuery = useQuery<LoadedProject>({
     queryKey: ["project", projectId],
@@ -127,6 +170,11 @@ export function StudioPage() {
   }, [openProjectQuery.data]);
 
   useEffect(() => {
+    setPreviewAspectRatio("16 / 9");
+    setPreviewFrameSize({ width: 1920, height: 1080 });
+  }, [screenTrackUrl]);
+
+  useEffect(() => {
     const detach = window.revamp.render.onProgress((payload: { projectId: string; ratio: number; rawLine: string }) => {
       if (payload.projectId !== projectId) return;
       setRenderProgress(payload.ratio);
@@ -148,6 +196,15 @@ export function StudioPage() {
 
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
+  }, []);
+
+  useEffect(() => {
+    const onFullscreenChange = () => {
+      setIsPreviewFullscreen(document.fullscreenElement === previewWrapRef.current);
+    };
+
+    document.addEventListener("fullscreenchange", onFullscreenChange);
+    return () => document.removeEventListener("fullscreenchange", onFullscreenChange);
   }, []);
 
   const saveMutation = useMutation({
@@ -178,7 +235,10 @@ export function StudioPage() {
     return project.timeline.zooms.find((zoom) => !zoom.disabled && zoom.startMs <= currentMs && currentMs <= zoom.endMs);
   }, [project, currentMs]);
 
-  const transform = useMemo(() => computeViewTransform(activeZoom, 1920, 1080), [activeZoom]);
+  const transform = useMemo(
+    () => computeViewTransform(activeZoom, previewFrameSize.width, previewFrameSize.height),
+    [activeZoom, previewFrameSize.height, previewFrameSize.width]
+  );
 
   const upsertProject = (recipe: (draft: ProjectFileV1) => ProjectFileV1) => {
     setProject((current) => {
@@ -211,6 +271,25 @@ export function StudioPage() {
 
   const backgroundStyle = project ? applyBackgroundStyle(project.timeline.background) : undefined;
 
+  const updatePreviewAspectRatio = (video: HTMLVideoElement) => {
+    if (video.videoWidth > 0 && video.videoHeight > 0) {
+      setPreviewAspectRatio(`${video.videoWidth} / ${video.videoHeight}`);
+      setPreviewFrameSize({ width: video.videoWidth, height: video.videoHeight });
+    }
+  };
+
+  const togglePreviewFullscreen = async () => {
+    const previewElement = previewWrapRef.current;
+    if (!previewElement) return;
+
+    if (document.fullscreenElement === previewElement) {
+      await document.exitFullscreen();
+      return;
+    }
+
+    await previewElement.requestFullscreen();
+  };
+
   const exportMutation = useMutation({
     mutationFn: async () => window.revamp.render.exportMp4(projectId),
     onMutate: () => {
@@ -218,6 +297,11 @@ export function StudioPage() {
       setRenderStatus({ state: "running", text: "Preparing export..." });
     },
     onSuccess: (result) => {
+      if (result.canceled) {
+        setRenderStatus({ state: "idle", text: "Export canceled." });
+        setRenderProgress(0);
+        return;
+      }
       setRenderStatus({ state: "done", text: `Exported to ${result.outputPath} with ${result.encoder}` });
       setRenderProgress(1);
     },
@@ -237,6 +321,7 @@ export function StudioPage() {
   }
 
   const durationMs = project.meta.durationMs;
+  const previewFramePadding = Math.max(0, Math.round(project.timeline.background.padding + project.timeline.background.inset));
 
   const moveZoomBoundary = (id: string, edge: "start" | "end", nextMs: number) => {
     upsertProject((draft) => {
@@ -327,17 +412,20 @@ export function StudioPage() {
             <button className="btn" onClick={() => setPaletteOpen(true)}>
               Command Menu (Ctrl+K)
             </button>
+            <button className="btn" onClick={() => void togglePreviewFullscreen()}>
+              {isPreviewFullscreen ? "Exit Fullscreen Preview" : "Fullscreen Preview"}
+            </button>
             <button className="btn btn-accent" onClick={() => exportMutation.mutateAsync()} disabled={exportMutation.isPending}>
               Export MP4
             </button>
           </div>
         }
       >
-        <div className="studio-preview-wrap" style={backgroundStyle}>
+        <div ref={previewWrapRef} className="studio-preview-wrap" style={backgroundStyle}>
           <div
             className="preview-stage"
             style={{
-              padding: `${project.timeline.background.inset}px`,
+              padding: `${previewFramePadding}px`,
               borderRadius: `${project.timeline.background.roundedCorners}px`,
               boxShadow: `0 0 ${project.timeline.background.shadow}px rgba(0,0,0,0.42)`
             }}
@@ -354,6 +442,11 @@ export function StudioPage() {
                 src={screenTrackUrl}
                 controls
                 className="preview-video"
+                style={{ aspectRatio: previewAspectRatio }}
+                controlsList="nofullscreen nodownload noremoteplayback"
+                disablePictureInPicture
+                playsInline
+                onLoadedMetadata={(event) => updatePreviewAspectRatio(event.currentTarget)}
                 onTimeUpdate={(event) => setCurrentMs(event.currentTarget.currentTime * 1000)}
               />
             </div>
@@ -714,54 +807,73 @@ export function StudioPage() {
                 <option value="none">None</option>
               </select>
             </label>
-            <label className="field">
-              <span>Gradient from</span>
-              <input
-                className="text-input"
-                value={project.timeline.background.gradientFrom}
-                onChange={(event) =>
-                  upsertProject((draft) => ({
-                    ...draft,
-                    timeline: {
-                      ...draft.timeline,
-                      background: { ...draft.timeline.background, gradientFrom: event.target.value }
-                    }
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Gradient to</span>
-              <input
-                className="text-input"
-                value={project.timeline.background.gradientTo}
-                onChange={(event) =>
-                  upsertProject((draft) => ({
-                    ...draft,
-                    timeline: {
-                      ...draft.timeline,
-                      background: { ...draft.timeline.background, gradientTo: event.target.value }
-                    }
-                  }))
-                }
-              />
-            </label>
-            <label className="field">
-              <span>Color</span>
-              <input
-                className="text-input"
-                value={project.timeline.background.color}
-                onChange={(event) =>
-                  upsertProject((draft) => ({
-                    ...draft,
-                    timeline: {
-                      ...draft.timeline,
-                      background: { ...draft.timeline.background, color: event.target.value }
-                    }
-                  }))
-                }
-              />
-            </label>
+            <div className="field">
+              <span>Gradient palette</span>
+              <div className="background-palette-grid">
+                {GRADIENT_BACKGROUND_SWATCHES.map((swatch) => {
+                  const isActive =
+                    sameColor(project.timeline.background.gradientFrom, swatch.from) &&
+                    sameColor(project.timeline.background.gradientTo, swatch.to) &&
+                    project.timeline.background.type === "gradient";
+
+                  return (
+                    <button
+                      key={`${swatch.name}-${swatch.from}-${swatch.to}`}
+                      type="button"
+                      className={`background-swatch ${isActive ? "active" : ""}`}
+                      onClick={() =>
+                        upsertProject((draft) => ({
+                          ...draft,
+                          timeline: {
+                            ...draft.timeline,
+                            background: {
+                              ...draft.timeline.background,
+                              type: "gradient",
+                              gradientFrom: swatch.from,
+                              gradientTo: swatch.to
+                            }
+                          }
+                        }))
+                      }
+                    >
+                      <span className="background-swatch-preview" style={{ background: `linear-gradient(135deg, ${swatch.from}, ${swatch.to})` }} />
+                      <span className="background-swatch-label">{swatch.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="field">
+              <span>Solid palette</span>
+              <div className="background-palette-grid">
+                {SOLID_BACKGROUND_SWATCHES.map((swatch) => {
+                  const isActive = sameColor(project.timeline.background.color, swatch.value) && project.timeline.background.type === "color";
+                  return (
+                    <button
+                      key={`${swatch.name}-${swatch.value}`}
+                      type="button"
+                      className={`background-swatch ${isActive ? "active" : ""}`}
+                      onClick={() =>
+                        upsertProject((draft) => ({
+                          ...draft,
+                          timeline: {
+                            ...draft.timeline,
+                            background: {
+                              ...draft.timeline.background,
+                              type: "color",
+                              color: swatch.value
+                            }
+                          }
+                        }))
+                      }
+                    >
+                      <span className="background-swatch-preview" style={{ background: swatch.value }} />
+                      <span className="background-swatch-label">{swatch.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
             <label className="field">
               <span>Image path</span>
               <input

@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { BackgroundSettings, ExportSettings, ProjectFileV1 } from "@revamp/core-types";
+import type { BackgroundSettings, ExportSettings, ProjectFileV1, ZoomSegment } from "@revamp/core-types";
 
 export type EncoderChoice = "h264_nvenc" | "h264_qsv" | "h264_amf" | "libx264" | "mpeg4";
 
@@ -8,6 +8,10 @@ export type RenderPlan = {
   args: string[];
   outputPath: string;
   encoder: EncoderChoice;
+};
+
+export type CreateRenderPlanOptions = {
+  backgroundImagePath?: string;
 };
 
 function backgroundColor(background: BackgroundSettings): string {
@@ -33,31 +37,91 @@ function escapeExpressionCommas(expression: string): string {
   return expression.replaceAll(",", "\\,");
 }
 
-export function createFilterGraph(project: ProjectFileV1, exportSettings: ExportSettings): string {
+function computeFrameMargin(project: ProjectFileV1, exportSettings: ExportSettings): number {
   const background = project.timeline.background;
-  const color = backgroundColor(background).replace("#", "0x");
-  const padding = Math.round(background.padding);
-  const radius = Math.round(background.roundedCorners);
+  const requestedMargin = Math.max(0, Math.round(background.padding) + Math.round(background.inset));
+  const maxAllowedMargin = Math.max(0, Math.min(Math.floor((exportSettings.width - 2) / 2), Math.floor((exportSettings.height - 2) / 2)));
+  return Math.min(requestedMargin, maxAllowedMargin);
+}
 
-  const baseScale = `scale=${exportSettings.width - padding * 2}:${exportSettings.height - padding * 2}:force_original_aspect_ratio=decrease`;
-  const pad = `pad=${exportSettings.width}:${exportSettings.height}:(ow-iw)/2:(oh-ih)/2:color=${color}`;
+function toSeconds(ms: number): string {
+  return (ms / 1000).toFixed(3);
+}
 
-  const firstActiveZoom = project.timeline.zooms.find((segment) => !segment.disabled);
-  if (!firstActiveZoom) {
-    return `${baseScale},${pad}`;
+function toPiecewiseExpression(
+  segments: ZoomSegment[],
+  pickValue: (segment: ZoomSegment) => string,
+  fallback: string
+): string {
+  if (segments.length === 0) {
+    return fallback;
   }
 
-  const zoom = Math.max(1, firstActiveZoom.level);
-  const xNorm = firstActiveZoom.manualTarget?.xNorm ?? 0.5;
-  const yNorm = firstActiveZoom.manualTarget?.yNorm ?? 0.5;
+  let expression = fallback;
+  for (let index = segments.length - 1; index >= 0; index -= 1) {
+    const segment = segments[index];
+    expression = `if(between(t,${toSeconds(segment.startMs)},${toSeconds(segment.endMs)}),${pickValue(segment)},${expression})`;
+  }
+  return expression;
+}
 
-  const cropW = `iw/${zoom.toFixed(3)}`;
-  const cropH = `ih/${zoom.toFixed(3)}`;
-  const cropX = escapeExpressionCommas(`max(0,min(iw-${cropW},iw*${xNorm.toFixed(4)}-${cropW}/2))`);
-  const cropY = escapeExpressionCommas(`max(0,min(ih-${cropH},ih*${yNorm.toFixed(4)}-${cropH}/2))`);
+function createForegroundFilter(project: ProjectFileV1, exportSettings: ExportSettings): string {
+  const margin = computeFrameMargin(project, exportSettings);
+  const innerWidth = Math.max(2, exportSettings.width - margin * 2);
+  const innerHeight = Math.max(2, exportSettings.height - margin * 2);
+  const baseScale = `scale=${innerWidth}:${innerHeight}:force_original_aspect_ratio=decrease:flags=lanczos,setsar=1`;
 
-  const rounded = radius > 0 ? `,format=yuva420p` : "";
-  return `crop=${cropW}:${cropH}:${cropX}:${cropY},${baseScale},${pad}${rounded}`;
+  const activeZooms = project.timeline.zooms.filter((segment) => !segment.disabled && segment.level > 1);
+  if (activeZooms.length === 0) {
+    return baseScale;
+  }
+
+  const zoomExpression = toPiecewiseExpression(
+    activeZooms,
+    (segment) => Math.max(1, segment.level).toFixed(4),
+    "1"
+  );
+  const xNormExpression = toPiecewiseExpression(
+    activeZooms,
+    (segment) => (segment.manualTarget?.xNorm ?? 0.5).toFixed(4),
+    "0.5"
+  );
+  const yNormExpression = toPiecewiseExpression(
+    activeZooms,
+    (segment) => (segment.manualTarget?.yNorm ?? 0.5).toFixed(4),
+    "0.5"
+  );
+
+  const zoomEscaped = escapeExpressionCommas(zoomExpression);
+  const cropX = escapeExpressionCommas(`max(0,min(iw*(${zoomExpression})-iw,iw*(${xNormExpression})*(${zoomExpression})-iw/2))`);
+  const cropY = escapeExpressionCommas(`max(0,min(ih*(${zoomExpression})-ih,ih*(${yNormExpression})*(${zoomExpression})-ih/2))`);
+  const dynamicZoom = `scale=iw*(${zoomEscaped}):ih*(${zoomEscaped}):eval=frame:flags=lanczos,crop=iw:ih:${cropX}:${cropY}`;
+
+  return `${dynamicZoom},${baseScale}`;
+}
+
+export function createFilterGraph(project: ProjectFileV1, exportSettings: ExportSettings): string {
+  const color = backgroundColor(project.timeline.background).replace("#", "0x");
+  const foreground = createForegroundFilter(project, exportSettings);
+  const pad = `pad=${exportSettings.width}:${exportSettings.height}:(ow-iw)/2:(oh-ih)/2:color=${color}`;
+  return `${foreground},${pad}`;
+}
+
+function createImageBackgroundFilterGraph(
+  project: ProjectFileV1,
+  exportSettings: ExportSettings
+): { graph: string; outputLabel: string } {
+  const foreground = createForegroundFilter(project, exportSettings);
+  const backgroundScale = [
+    `scale=${exportSettings.width}:${exportSettings.height}:force_original_aspect_ratio=increase:flags=lanczos`,
+    `crop=${exportSettings.width}:${exportSettings.height}`,
+    "setsar=1"
+  ].join(",");
+
+  return {
+    graph: `[0:v]${foreground}[fg];[1:v]${backgroundScale}[bg];[bg][fg]overlay=(W-w)/2:(H-h)/2:shortest=1[vout]`,
+    outputLabel: "[vout]"
+  };
 }
 
 export function createRenderPlan(
@@ -65,16 +129,23 @@ export function createRenderPlan(
   inputPath: string,
   outputPath: string,
   ffmpegPath: string,
-  encoder: EncoderChoice
+  encoder: EncoderChoice,
+  options?: CreateRenderPlanOptions
 ): RenderPlan {
-  const filterGraph = createFilterGraph(project, project.export);
+  const backgroundImagePath = options?.backgroundImagePath?.trim();
+  const imageBackgroundEnabled = project.timeline.background.type === "image" && Boolean(backgroundImagePath);
 
-  const args = [
-    "-y",
-    "-i",
-    inputPath,
-    "-vf",
-    filterGraph,
+  const args = ["-y", "-i", inputPath];
+
+  if (imageBackgroundEnabled && backgroundImagePath) {
+    const { graph, outputLabel } = createImageBackgroundFilterGraph(project, project.export);
+    args.push("-loop", "1", "-i", backgroundImagePath, "-filter_complex", graph, "-map", outputLabel, "-shortest");
+  } else {
+    const filterGraph = createFilterGraph(project, project.export);
+    args.push("-vf", filterGraph);
+  }
+
+  args.push(
     "-r",
     String(project.export.fps),
     "-c:v",
@@ -84,7 +155,7 @@ export function createRenderPlan(
     "-movflags",
     "+faststart",
     outputPath
-  ];
+  );
 
   return { ffmpegPath, args, outputPath, encoder };
 }

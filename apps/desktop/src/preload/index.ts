@@ -18,6 +18,8 @@ type LoadedProject = {
   };
 };
 
+type ExportResult = { canceled: true } | { canceled: false; outputPath: string; encoder: string };
+
 const api = {
   recording: {
     listSources: (): Promise<DesktopSource[]> => ipcRenderer.invoke("recording:list-sources")
@@ -44,7 +46,7 @@ const api = {
     update: (patch: Partial<AppSettings>): Promise<AppSettings> => ipcRenderer.invoke("settings:update", patch)
   },
   render: {
-    exportMp4: (projectId: string, outputPath?: string): Promise<{ outputPath: string; encoder: string }> =>
+    exportMp4: (projectId: string, outputPath?: string): Promise<ExportResult> =>
       ipcRenderer.invoke("render:export-mp4", { projectId, outputPath }),
     onProgress: (listener: (progress: { projectId: string; ratio: number; rawLine: string }) => void): (() => void) => {
       const channel = "render:progress";
